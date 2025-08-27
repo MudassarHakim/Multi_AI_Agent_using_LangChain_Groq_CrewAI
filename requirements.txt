@@ -1,6 +1,5 @@
-fastapi
-uvicorn
-crewai[tools]
-langchain-groq
-exa_py
-tiktoken
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+crewai[tools]==0.22.5
+langchain-groq==0.1.4
+exa-py==1.0.8
