@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-import os
+import os, json
+from typing import List, Dict, Any
 
 from crewai import Agent, Task, Crew, Process
 from langchain_groq import ChatGroq
@@ -18,20 +19,18 @@ class AnalyzeRequest(BaseModel):
 @app.post("/analyze")
 def analyze(request: AnalyzeRequest):
     try:
-        # --- Set up API keys for Groq and Exa
+        # --- Set up API keys
         os.environ["GROQ_API_KEY"] = request.groq_api_key
         exa_client = Exa(api_key=request.exa_api_key)
 
-        # --- Hardcode the model name with provider prefix
-        model_name1 = "groq/llama3-70b-8192"
-        
+        # --- Hardcode the model name
         llm = ChatGroq(
             temperature=0.1,
-            model_name=model_name1,
-            groq_api_key=request.groq_api_key  # explicitly pass key
+            model_name="groq/llama3-70b-8192",
+            groq_api_key=request.groq_api_key
         )
 
-        # --- Agent 1: Threat Analyst
+        # --- Threat Analyst
         def fetch_cybersecurity_threats(query):
             result = exa_client.search_and_contents(query)
             threat_list = []
@@ -43,106 +42,113 @@ def analyze(request: AnalyzeRequest):
                         "published_date": getattr(item, "published_date", "Unknown Date"),
                         "summary": getattr(item, "summary", "No Summary"),
                     })
-            return threat_list  #return list of dicts
+            return threat_list
 
         threat_analyst = Agent(
             role="Cybersecurity Threat Intelligence Analyst",
             goal="Gather real-time cybersecurity and repo threat intelligence.",
-            backstory="An expert in cybersecurity, code risk hunting, and open source intelligence using LLMs.",
-            verbose=True,
+            backstory="Expert in code risk hunting and OSINT.",
+            verbose=request.verbose,
             allow_delegation=False,
             llm=llm,
-            max_iter=5,
-            memory=True,
         )
         threat_analysis_task = Task(
-            description=f"Analyze the GitHub repo {request.github_repo} using Exa API for security/code risks and summarize threats.",
-            expected_output="A list of recent code, dependency, or repository threats.",
+            description=f"Analyze the GitHub repo {request.github_repo} using Exa API for security/code risks.",
+            expected_output="List of recent threats.",
             agent=threat_analyst,
             callback=lambda _: fetch_cybersecurity_threats(request.github_repo),
         )
 
-        # --- Agent 2: Vulnerability Researcher
-        def fetch_latest_cves():
-            cve_query = "Latest CVEs and security vulnerabilities"
-            result = exa_client.search_and_contents(cve_query)
-            cve_list = []
-            if hasattr(result, "results") and result.results:
-                for item in result.results[:5]:
-                    cve_list.append({
-                        "title": getattr(item, "title", "No Title"),
-                        "url": getattr(item, "url", "#"),
-                        "published_date": getattr(item, "published_date", "Unknown Date"),
-                        "summary": getattr(item, "summary", "No Summary"),
-                    })
-            return cve_list  # return list of dicts
-
+        # --- Vulnerability Researcher
         vulnerability_researcher = Agent(
             role="Vulnerability Researcher",
             goal="Identify the latest vulnerabilities for the codebase and dependencies.",
-            backstory="A specialist in code, dependency, and supply chain vulnerabilities.",
-            verbose=True,
+            backstory="Specialist in code and dependency vulnerabilities.",
+            verbose=request.verbose,
             allow_delegation=False,
             llm=llm,
-            max_iter=5,
-            memory=True,
         )
         vulnerability_research_task = Task(
-            description="Fetch and analyze the latest relevant security vulnerabilities (CVEs) for this repository.",
-            expected_output="A brief list of recent CVEs and their relevance or impact.",
+            description=(
+                "Fetch and analyze the latest relevant security vulnerabilities (CVEs) for this repository. "
+                "Output MUST be JSON array with fields: "
+                "[{cve_id, severity, description, fix, reference_url}]"
+            ),
+            expected_output="JSON list of CVEs with details.",
             agent=vulnerability_researcher,
-            callback=lambda _: fetch_latest_cves(),
         )
 
-        # --- Agent 3: Incident Response Advisor
+        # --- Incident Response Advisor
         incident_response_advisor = Agent(
             role="Incident Response Advisor",
-            goal="Suggest mitigation strategies specific to the detected issues.",
-            backstory="A blue-team expert mapping threats to actionable remediations.",
-            verbose=True,
+            goal="Suggest mitigation strategies specific to detected issues.",
+            backstory="Blue-team expert mapping threats to mitigations.",
+            verbose=request.verbose,
             allow_delegation=False,
             llm=llm,
-            max_iter=5,
-            memory=True,
         )
         incident_response_task = Task(
-            description="Analyze found threats and vulnerabilities and recommend best mitigation and response strategies for the repository.",
-            expected_output="List of prioritized, actionable mitigations.",
+            description="Recommend prioritized mitigations based on threats and CVEs.",
+            expected_output="List of actionable mitigations.",
             agent=incident_response_advisor,
             context=[threat_analysis_task, vulnerability_research_task],
         )
 
-        # --- Agent 4: Report Writer
+        # --- Report Writer
         cybersecurity_writer = Agent(
             role="Cybersecurity Report Writer",
-            goal="Write a clear, structured executive report on the findings.",
-            backstory="A veteran security report writer, skilled at concise, readable, actionable summaries.",
-            verbose=True,
+            goal="Write a structured executive report on findings.",
+            backstory="Veteran security report writer.",
+            verbose=request.verbose,
             allow_delegation=False,
             llm=llm,
-            max_iter=5,
-            memory=True,
         )
         write_threat_report_task = Task(
-            description="Summarize all findings, vulnerabilities, and recommendations into a professional GitHub repository security intelligence report.",
-            expected_output="A comprehensive report including threats, vulnerabilities, and suggested actions.",
+            description="Summarize findings, vulnerabilities, and recommendations into a structured report.",
+            expected_output="Executive security report.",
             agent=cybersecurity_writer,
             context=[threat_analysis_task, vulnerability_research_task, incident_response_task],
         )
 
-        # --- Run the multi-agent workflow
+        # --- Run workflow
         crew = Crew(
             agents=[threat_analyst, vulnerability_researcher, incident_response_advisor, cybersecurity_writer],
             tasks=[threat_analysis_task, vulnerability_research_task, incident_response_task, write_threat_report_task],
-            verbose=True,
+            verbose=request.verbose,
             process=Process.sequential,
             full_output=True,
             share_crew=False,
             manager_llm=llm,
-            max_iter=15,
         )
         results = crew.kickoff()
-        return {"result": results}
+
+        # --- Extract agent outputs
+        def extract(agent_role: str) -> str:
+            for t in results["tasks_output"]:
+                if t.get("agent") and t["agent"].role == agent_role:
+                    return t.get("raw", "")
+            return ""
+
+        threats = extract("Cybersecurity Threat Intelligence Analyst")
+        vulns_raw = extract("Vulnerability Researcher")
+        mitigations = extract("Incident Response Advisor")
+        summary = extract("Cybersecurity Report Writer")
+
+        # --- Try parsing JSON CVE list
+        parsed_cves: List[Dict[str, Any]] = []
+        try:
+            parsed_cves = json.loads(vulns_raw)
+        except Exception:
+            pass
+
+        return {
+            "repository": request.github_repo,
+            "threats": threats,
+            "cves": parsed_cves,
+            "mitigations": mitigations,
+            "executive_summary": summary,
+            "token_usage": results.get("token_usage", {})
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
