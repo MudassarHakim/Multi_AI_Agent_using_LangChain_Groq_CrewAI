@@ -33,7 +33,7 @@ def analyze(request: AnalyzeRequest):
 
         # --- Agent 1: Threat Analyst
         def fetch_cybersecurity_threats(query):
-            result = exa_client.search_and_contents(query, summary=True)
+            result = exa_client.search_and_contents(query)
             threat_list = []
             if hasattr(result, "results") and result.results:
                 for item in result.results:
@@ -65,7 +65,7 @@ def analyze(request: AnalyzeRequest):
         # --- Agent 2: Vulnerability Researcher
         def fetch_latest_cves():
             cve_query = "Latest CVEs and security vulnerabilities"
-            result = exa_client.search_and_contents(cve_query, summary=True)
+            result = exa_client.search_and_contents(cve_query)
             cve_list = []
             if hasattr(result, "results") and result.results:
                 for item in result.results[:5]:  # Top 5
