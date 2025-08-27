@@ -43,7 +43,7 @@ def analyze(request: AnalyzeRequest):
                         "published_date": getattr(item, "published_date", "Unknown Date"),
                         "summary": getattr(item, "summary", "No Summary"),
                     })
-            return threat_list
+            return "\n\n".join(threat_list) if threat_list else "No threats found."
 
         threat_analyst = Agent(
             role="Cybersecurity Threat Intelligence Analyst",
@@ -75,7 +75,7 @@ def analyze(request: AnalyzeRequest):
                         "published_date": getattr(item, "published_date", "Unknown Date"),
                         "summary": getattr(item, "summary", "No Summary"),
                     })
-            return cve_list
+            return "\n\n".join(cve_list) if cve_list else "No CVEs found."
 
         vulnerability_researcher = Agent(
             role="Vulnerability Researcher",
