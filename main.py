@@ -129,7 +129,7 @@ def analyze(request: AnalyzeRequest):
         crew = Crew(
             agents=[threat_analyst, vulnerability_researcher, incident_response_advisor, cybersecurity_writer],
             tasks=[threat_analysis_task, vulnerability_research_task, incident_response_task, write_threat_report_task],
-            verbose=2,
+            verbose=True,
             process=Process.sequential,
             full_output=True,
             share_crew=False,
