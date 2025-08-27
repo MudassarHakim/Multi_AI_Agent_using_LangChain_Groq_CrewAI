@@ -3,3 +3,4 @@ uvicorn
 crewai[tools]
 langchain-groq
 exa_py
+tiktoken==0.6.0
