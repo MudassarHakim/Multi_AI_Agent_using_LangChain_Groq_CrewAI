@@ -37,13 +37,14 @@ def analyze(request: AnalyzeRequest):
             threat_list = []
             if hasattr(result, "results") and result.results:
                 for item in result.results:
-                    threat_list.append({
-                        "title": getattr(item, "title", "No Title"),
-                        "url": getattr(item, "url", "#"),
-                        "published_date": getattr(item, "published_date", "Unknown Date"),
-                        "summary": getattr(item, "summary", "No Summary"),
-                    })
+                    threat_list.append(
+                        f"Title: {getattr(item, 'title', 'No Title')}\n"
+                        f"URL: {getattr(item, 'url', '#')}\n"
+                        f"Published: {getattr(item, 'published_date', 'Unknown Date')}\n"
+                        f"Summary: {getattr(item, 'summary', 'No Summary')}\n"
+                    )
             return "\n\n".join(threat_list) if threat_list else "No threats found."
+
 
         threat_analyst = Agent(
             role="Cybersecurity Threat Intelligence Analyst",
@@ -68,14 +69,15 @@ def analyze(request: AnalyzeRequest):
             result = exa_client.search_and_contents(cve_query)
             cve_list = []
             if hasattr(result, "results") and result.results:
-                for item in result.results[:5]:  # Top 5
-                    cve_list.append({
-                        "title": getattr(item, "title", "No Title"),
-                        "url": getattr(item, "url", "#"),
-                        "published_date": getattr(item, "published_date", "Unknown Date"),
-                        "summary": getattr(item, "summary", "No Summary"),
-                    })
+                for item in result.results[:5]:
+                    cve_list.append(
+                        f"Title: {getattr(item, 'title', 'No Title')}\n"
+                        f"URL: {getattr(item, 'url', '#')}\n"
+                        f"Published: {getattr(item, 'published_date', 'Unknown Date')}\n"
+                        f"Summary: {getattr(item, 'summary', 'No Summary')}\n"
+                    )
             return "\n\n".join(cve_list) if cve_list else "No CVEs found."
+
 
         vulnerability_researcher = Agent(
             role="Vulnerability Researcher",
