@@ -16,6 +16,7 @@ class AnalyzeRequest(BaseModel):
     model: str = "llama3-70b-8192"
     provider: str = "groq"
 
+
 @app.post("/analyze")
 def analyze(request: AnalyzeRequest):
     try:
@@ -24,10 +25,14 @@ def analyze(request: AnalyzeRequest):
         exa_client = Exa(api_key=request.exa_api_key)
 
         # --- Initialize LLM
+        # Ensure provider prefix (LiteLLM requires "groq/llama3-70b-8192" not just "llama3-70b-8192")
+        model_name = request.model
+        if not model_name.startswith("groq/"):
+        model_name = f"groq/{model_name}"
+        
         llm = ChatGroq(
             temperature=0.1,
-            model_name="llama3-70b-8192",
-            model_name=request.model,
+            model_name=model_name,
             groq_api_key=request.groq_api_key  # explicitly pass key
         )
 
