@@ -23,7 +23,7 @@ def analyze(request: AnalyzeRequest):
         os.environ["GROQ_API_KEY"] = request.groq_api_key
         exa_client = Exa(api_key=request.exa_api_key)
 
-        # --- Hardcode the model name
+        # --- Hardcode the model
         llm = ChatGroq(
             temperature=0.1,
             model_name="groq/llama3-70b-8192",
@@ -54,7 +54,7 @@ def analyze(request: AnalyzeRequest):
         )
         threat_analysis_task = Task(
             description=f"Analyze the GitHub repo {request.github_repo} using Exa API for security/code risks.",
-            expected_output="List of recent threats.",
+            expected_output="List of recent threats (JSON array).",
             agent=threat_analyst,
             callback=lambda _: fetch_cybersecurity_threats(request.github_repo),
         )
@@ -70,47 +70,51 @@ def analyze(request: AnalyzeRequest):
         )
         vulnerability_research_task = Task(
             description=(
-                "Fetch and analyze the latest relevant security vulnerabilities (CVEs) for this repository. "
-                "Output MUST be a valid JSON array with objects containing: "
-                "cve_id, severity, description, fix, reference_url"
+                "Fetch and analyze relevant security vulnerabilities (CVEs) for this repository. "
+                "Return STRICT JSON array like:\n"
+                "[{ \"cve_id\": \"CVE-XXXX\", \"severity\": \"High\", "
+                "\"description\": \"...\", \"fix\": \"...\", \"reference_url\": \"...\" }]"
             ),
-            expected_output="JSON list of CVEs with details.",
+            expected_output="JSON array of CVEs",
             agent=vulnerability_researcher,
         )
 
         # --- Incident Response Advisor
         incident_response_advisor = Agent(
             role="Incident Response Advisor",
-            goal="Suggest mitigation strategies specific to detected issues.",
+            goal="Suggest mitigation strategies for the identified vulnerabilities.",
             backstory="Blue-team expert mapping threats to mitigations.",
             verbose=request.verbose,
             allow_delegation=False,
             llm=llm,
         )
         incident_response_task = Task(
-            description="Recommend prioritized mitigations based on threats and CVEs.",
-            expected_output="List of actionable mitigations.",
+            description=(
+                "Given the identified CVEs, return STRICT JSON array of mitigations:\n"
+                "[{ \"cve_id\": \"CVE-XXXX\", \"mitigation\": \"...\" }]"
+            ),
+            expected_output="JSON array of mitigations",
             agent=incident_response_advisor,
-            context=[threat_analysis_task, vulnerability_research_task],
+            context=[vulnerability_research_task],
         )
 
         # --- Report Writer
         cybersecurity_writer = Agent(
             role="Cybersecurity Report Writer",
-            goal="Write a structured executive report on findings.",
+            goal="Write an executive summary in polished prose.",
             backstory="Veteran security report writer.",
             verbose=request.verbose,
             allow_delegation=False,
             llm=llm,
         )
         write_threat_report_task = Task(
-            description="Summarize findings, vulnerabilities, and recommendations into a structured report.",
-            expected_output="Executive security report.",
+            description="Summarize CVEs and mitigations into an executive summary (plain text, not JSON).",
+            expected_output="Executive summary text",
             agent=cybersecurity_writer,
-            context=[threat_analysis_task, vulnerability_research_task, incident_response_task],
+            context=[vulnerability_research_task, incident_response_task],
         )
 
-        # --- Run workflow
+        # --- Run Crew
         crew = Crew(
             agents=[threat_analyst, vulnerability_researcher, incident_response_advisor, cybersecurity_writer],
             tasks=[threat_analysis_task, vulnerability_research_task, incident_response_task, write_threat_report_task],
@@ -122,38 +126,37 @@ def analyze(request: AnalyzeRequest):
         )
         results = crew.kickoff()
 
-        # --- Normalize results
-        threats, vulns_raw, mitigations, summary = "", "", "", ""
-        parsed_cves: List[Dict[str, Any]] = []
-
+        # --- Normalize outputs
+        threats, vulns_raw, mitigations_raw, summary = [], "[]", "[]", ""
         if isinstance(results, dict) and "tasks_output" in results:
-            # old structured format
-            def extract(agent_role: str) -> str:
+            def extract(role: str):
                 for t in results["tasks_output"]:
-                    if t.get("agent") and t["agent"].role == agent_role:
+                    if t.get("agent") and t["agent"].role == role:
                         return t.get("raw", "")
                 return ""
-
             threats = extract("Cybersecurity Threat Intelligence Analyst")
             vulns_raw = extract("Vulnerability Researcher")
-            mitigations = extract("Incident Response Advisor")
+            mitigations_raw = extract("Incident Response Advisor")
             summary = extract("Cybersecurity Report Writer")
-
         else:
-            # newer versions may just return text
             summary = str(results)
 
-        # --- Try parsing JSON CVE list
-        try:
-            parsed_cves = json.loads(vulns_raw) if vulns_raw else []
-        except Exception:
-            parsed_cves = []
+        # --- Parse JSON safely
+        def safe_parse(raw: str, fallback: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+            try:
+                parsed = json.loads(raw)
+                return parsed if isinstance(parsed, list) else fallback
+            except Exception:
+                return fallback
+
+        parsed_cves = safe_parse(vulns_raw, [])
+        parsed_mitigations = safe_parse(mitigations_raw, [])
 
         return {
             "repository": request.github_repo,
             "threats": threats,
             "cves": parsed_cves,
-            "mitigations": mitigations,
+            "mitigations": parsed_mitigations,
             "executive_summary": summary,
             "token_usage": results.get("token_usage", {}) if isinstance(results, dict) else {}
         }
