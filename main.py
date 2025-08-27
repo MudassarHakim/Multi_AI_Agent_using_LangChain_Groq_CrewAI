@@ -71,8 +71,8 @@ def analyze(request: AnalyzeRequest):
         vulnerability_research_task = Task(
             description=(
                 "Fetch and analyze the latest relevant security vulnerabilities (CVEs) for this repository. "
-                "Output MUST be JSON array with fields: "
-                "[{cve_id, severity, description, fix, reference_url}]"
+                "Output MUST be a valid JSON array with objects containing: "
+                "cve_id, severity, description, fix, reference_url"
             ),
             expected_output="JSON list of CVEs with details.",
             agent=vulnerability_researcher,
@@ -122,24 +122,32 @@ def analyze(request: AnalyzeRequest):
         )
         results = crew.kickoff()
 
-        # --- Extract agent outputs
-        def extract(agent_role: str) -> str:
-            for t in results["tasks_output"]:
-                if t.get("agent") and t["agent"].role == agent_role:
-                    return t.get("raw", "")
-            return ""
+        # --- Normalize results
+        threats, vulns_raw, mitigations, summary = "", "", "", ""
+        parsed_cves: List[Dict[str, Any]] = []
 
-        threats = extract("Cybersecurity Threat Intelligence Analyst")
-        vulns_raw = extract("Vulnerability Researcher")
-        mitigations = extract("Incident Response Advisor")
-        summary = extract("Cybersecurity Report Writer")
+        if isinstance(results, dict) and "tasks_output" in results:
+            # old structured format
+            def extract(agent_role: str) -> str:
+                for t in results["tasks_output"]:
+                    if t.get("agent") and t["agent"].role == agent_role:
+                        return t.get("raw", "")
+                return ""
+
+            threats = extract("Cybersecurity Threat Intelligence Analyst")
+            vulns_raw = extract("Vulnerability Researcher")
+            mitigations = extract("Incident Response Advisor")
+            summary = extract("Cybersecurity Report Writer")
+
+        else:
+            # newer versions may just return text
+            summary = str(results)
 
         # --- Try parsing JSON CVE list
-        parsed_cves: List[Dict[str, Any]] = []
         try:
-            parsed_cves = json.loads(vulns_raw)
+            parsed_cves = json.loads(vulns_raw) if vulns_raw else []
         except Exception:
-            pass
+            parsed_cves = []
 
         return {
             "repository": request.github_repo,
@@ -147,7 +155,7 @@ def analyze(request: AnalyzeRequest):
             "cves": parsed_cves,
             "mitigations": mitigations,
             "executive_summary": summary,
-            "token_usage": results.get("token_usage", {})
+            "token_usage": results.get("token_usage", {}) if isinstance(results, dict) else {}
         }
 
     except Exception as e:
