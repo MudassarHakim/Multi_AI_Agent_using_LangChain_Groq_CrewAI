@@ -1,5 +1,5 @@
 streamlit
 gitpython
-crewai[tools]==0.28.8
+crewai==0.28.8
 exa_py
 langchain-groq==0.1.3
