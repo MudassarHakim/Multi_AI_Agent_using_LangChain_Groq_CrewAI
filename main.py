@@ -26,13 +26,13 @@ def analyze(request: AnalyzeRequest):
 
         # --- Initialize LLM
         # Ensure provider prefix (LiteLLM requires "groq/llama3-70b-8192" not just "llama3-70b-8192")
-        model_name = request.model
-        if not model_name.startswith("groq/"):
-        model_name = f"groq/{model_name}"
+        model_name1 = request.model
+        if not model_name1.startswith("groq/"):
+        model_name1 = f"groq/{model_name1}"
         
         llm = ChatGroq(
             temperature=0.1,
-            model_name=model_name,
+            model_name=model_name1,
             groq_api_key=request.groq_api_key  # explicitly pass key
         )
 
