@@ -12,6 +12,9 @@ class AnalyzeRequest(BaseModel):
     groq_api_key: str
     exa_api_key: str
     github_repo: str
+    verbose: bool = False
+    model: str = "llama3-70b-8192"
+    provider: str = "groq"
 
 @app.post("/analyze")
 def analyze(request: AnalyzeRequest):
@@ -23,8 +26,11 @@ def analyze(request: AnalyzeRequest):
         # --- Initialize LLM
         llm = ChatGroq(
             temperature=0.1,
-            model_name="llama3-70b-8192"
+            model_name="llama3-70b-8192",
+            model_name=request.model,
+            groq_api_key=request.groq_api_key  # explicitly pass key
         )
+
 
         # --- Agent 1: Threat Analyst (customized for repo)
         def fetch_cybersecurity_threats(query):
