@@ -13,8 +13,6 @@ class AnalyzeRequest(BaseModel):
     exa_api_key: str
     github_repo: str
     verbose: bool = False
-    model: str = "llama3-70b-8192"
-    provider: str = "groq"
 
 
 @app.post("/analyze")
@@ -24,7 +22,6 @@ def analyze(request: AnalyzeRequest):
         os.environ["GROQ_API_KEY"] = request.groq_api_key
         exa_client = Exa(api_key=request.exa_api_key)
 
-        # --- Initialize LLM
         # --- Hardcode the model name with provider prefix
         model_name1 = "groq/llama3-70b-8192"
         
@@ -34,8 +31,7 @@ def analyze(request: AnalyzeRequest):
             groq_api_key=request.groq_api_key  # explicitly pass key
         )
 
-
-        # --- Agent 1: Threat Analyst (customized for repo)
+        # --- Agent 1: Threat Analyst
         def fetch_cybersecurity_threats(query):
             result = exa_client.search_and_contents(query, summary=True)
             threat_list = []
@@ -66,13 +62,13 @@ def analyze(request: AnalyzeRequest):
             callback=lambda _: fetch_cybersecurity_threats(request.github_repo),
         )
 
-        # --- Agent 2: Vulnerability Researcher (can be further customized)
+        # --- Agent 2: Vulnerability Researcher
         def fetch_latest_cves():
             cve_query = "Latest CVEs and security vulnerabilities"
             result = exa_client.search_and_contents(cve_query, summary=True)
             cve_list = []
             if hasattr(result, "results") and result.results:
-                for item in result.results[:5]: # Top 5
+                for item in result.results[:5]:  # Top 5
                     cve_list.append({
                         "title": getattr(item, "title", "No Title"),
                         "url": getattr(item, "url", "#"),
@@ -116,7 +112,7 @@ def analyze(request: AnalyzeRequest):
             context=[threat_analysis_task, vulnerability_research_task],
         )
 
-        # --- Agent 4: Report Writer (Aggregates)
+        # --- Agent 4: Report Writer
         cybersecurity_writer = Agent(
             role="Cybersecurity Report Writer",
             goal="Write a clear, structured executive report on the findings.",
@@ -134,7 +130,7 @@ def analyze(request: AnalyzeRequest):
             context=[threat_analysis_task, vulnerability_research_task, incident_response_task],
         )
 
-        # --- Run the multi-agent workflow sequentially
+        # --- Run the multi-agent workflow
         crew = Crew(
             agents=[threat_analyst, vulnerability_researcher, incident_response_advisor, cybersecurity_writer],
             tasks=[threat_analysis_task, vulnerability_research_task, incident_response_task, write_threat_report_task],
