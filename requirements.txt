@@ -2,3 +2,4 @@ streamlit
 crewai
 exa_py
 langchain-groq
+chromadb
