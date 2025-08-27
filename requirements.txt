@@ -1,5 +1,4 @@
 streamlit
-gitpython
 crewai
 exa_py
 langchain-groq
