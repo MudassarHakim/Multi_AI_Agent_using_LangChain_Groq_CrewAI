@@ -28,7 +28,7 @@ def analyze(request: AnalyzeRequest):
         # Ensure provider prefix (LiteLLM requires "groq/llama3-70b-8192" not just "llama3-70b-8192")
         model_name1 = request.model
         if not model_name1.startswith("groq/"):
-        model_name1 = f"groq/{model_name1}"
+            model_name1 = f"groq/{model_name1}"
         
         llm = ChatGroq(
             temperature=0.1,
