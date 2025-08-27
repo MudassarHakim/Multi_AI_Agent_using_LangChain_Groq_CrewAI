@@ -3,4 +3,4 @@ uvicorn[standard]==0.30.6
 crewai==0.165.1
 langchain-groq==0.1.4
 exa-py==1.0.8
-tiktoken==0.6.0   # wheel available, no Rust build
+tiktoken>=0.7.0   # wheel available, no Rust build
