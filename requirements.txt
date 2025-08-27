@@ -1,19 +1,5 @@
-# Web app framework
-streamlit>=1.36.0
-
-# GitHub repo download & file handling
-gitpython>=3.1.43
-
-# Syntax highlighting / file rendering
-pygments>=2.18.0
-
-# CrewAI + LLMs
-crewai>=0.1.0
-groq>=0.9.0
-exa-py>=1.0.7
-
-# For structured output + JSON
-pydantic>=2.8.2
-
-# For parsing markdown & reports
-markdown>=3.6
+streamlit
+gitpython
+crewai[tools]==0.28.8
+exa_py
+langchain-groq==0.1.3
