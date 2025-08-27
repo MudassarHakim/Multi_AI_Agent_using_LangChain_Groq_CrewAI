@@ -2,4 +2,4 @@ streamlit
 crewai
 exa_py
 langchain-groq
-chromadb
+chromadb>=0.4.15
