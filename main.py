@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-import os, json
+import os, json, re
 from typing import List, Dict, Any
 
 from crewai import Agent, Task, Crew, Process
@@ -141,7 +141,7 @@ def analyze(request: AnalyzeRequest):
         else:
             summary = str(results)
 
-        # --- Parse JSON safely
+        # --- Safe JSON parse
         def safe_parse(raw: str, fallback: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             try:
                 parsed = json.loads(raw)
@@ -151,6 +151,31 @@ def analyze(request: AnalyzeRequest):
 
         parsed_cves = safe_parse(vulns_raw, [])
         parsed_mitigations = safe_parse(mitigations_raw, [])
+
+        # --- Fallback: extract from executive summary if empty
+        if not parsed_cves and summary:
+            cve_pattern = re.compile(r"(CVE-\d{4}-\d+)")
+            matches = cve_pattern.findall(summary)
+            for cve in set(matches):
+                parsed_cves.append({
+                    "cve_id": cve,
+                    "severity": "Unknown",
+                    "description": f"See executive summary for details on {cve}.",
+                    "fix": "Refer to mitigation section.",
+                    "reference_url": f"https://nvd.nist.gov/vuln/detail/{cve}"
+                })
+
+        if not parsed_mitigations and parsed_cves and summary:
+            for cve in parsed_cves:
+                # Try to find mitigation sentences mentioning the CVE
+                mitigation = ""
+                match = re.search(rf"{cve['cve_id']}.*?(upgrade[^.]+)", summary, re.IGNORECASE)
+                if match:
+                    mitigation = match.group(1)
+                parsed_mitigations.append({
+                    "cve_id": cve["cve_id"],
+                    "mitigation": mitigation or "See executive summary for mitigation details."
+                })
 
         return {
             "repository": request.github_repo,
