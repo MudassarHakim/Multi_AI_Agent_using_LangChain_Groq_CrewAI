@@ -1,5 +1,5 @@
-streamlit
-crewai
-exa_py
+fastapi
+uvicorn
+crewai[tools]
 langchain-groq
-chromadb>=0.4.15
+exa_py
