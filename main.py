@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os, json, re
 from typing import List, Dict, Any
@@ -8,6 +9,15 @@ from langchain_groq import ChatGroq
 from exa_py import Exa
 
 app = FastAPI()
+
+# --- Enable CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # or specify your frontend origin(s) e.g. ["http://localhost:3000"]
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class AnalyzeRequest(BaseModel):
     groq_api_key: str
@@ -167,7 +177,6 @@ def analyze(request: AnalyzeRequest):
 
         if not parsed_mitigations and parsed_cves and summary:
             for cve in parsed_cves:
-                # Try to find mitigation sentences mentioning the CVE
                 mitigation = ""
                 match = re.search(rf"{cve['cve_id']}.*?(upgrade[^.]+)", summary, re.IGNORECASE)
                 if match:
