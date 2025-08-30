@@ -1,30 +1,97 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import os, json, re
-from typing import List, Dict, Any
+import os, json, re, base64
+from typing import List, Dict, Any, Optional
 
 from crewai import Agent, Task, Crew, Process
 from langchain_groq import ChatGroq
 from exa_py import Exa
+
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 app = FastAPI()
 
 # --- Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # or specify your frontend origin(s) e.g. ["http://localhost:3000"]
+    allow_origins=["*"],  # change to explicit origin(s) for production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# ---------- AES-GCM models & helpers ----------
+AAD_CONTEXT_DEFAULT = b"analyze-v1"  # default associated data
+
+class EncryptedPayload(BaseModel):
+    iv: str           # base64
+    ciphertext: str   # base64 (ciphertext without tag)
+    tag: str          # base64 (16 bytes)
+    aad: Optional[str] = None  # optional associated data (string)
+
+def _get_aes_key() -> bytes:
+    key_env = os.getenv("AES_GCM_KEY")
+    if not key_env:
+        raise HTTPException(status_code=500, detail="AES_GCM_KEY not set on server")
+    # Try base64
+    try:
+        k = base64.b64decode(key_env)
+        if len(k) == 32:
+            return k
+    except Exception:
+        pass
+    # Try hex
+    try:
+        k = bytes.fromhex(key_env)
+        if len(k) == 32:
+            return k
+    except Exception:
+        pass
+    raise HTTPException(status_code=500, detail="AES_GCM_KEY must be 32 bytes (Base64 or hex)")
+
+def encrypt_json(obj: Any, aad: Optional[bytes] = None) -> EncryptedPayload:
+    key = _get_aes_key()
+    aes = AESGCM(key)
+    iv = os.urandom(12)  # 96-bit nonce recommended
+    plaintext = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+    if aad is None:
+        aad = AAD_CONTEXT_DEFAULT
+    c_and_tag = aes.encrypt(iv, plaintext, aad)
+    ciphertext, tag = c_and_tag[:-16], c_and_tag[-16:]
+    return EncryptedPayload(
+        iv=base64.b64encode(iv).decode(),
+        ciphertext=base64.b64encode(ciphertext).decode(),
+        tag=base64.b64encode(tag).decode(),
+        aad=(aad.decode() if isinstance(aad, bytes) else aad),
+    )
+
+def decrypt_to_json(payload: EncryptedPayload) -> Any:
+    key = _get_aes_key()
+    aes = AESGCM(key)
+    try:
+        iv = base64.b64decode(payload.iv)
+        ct = base64.b64decode(payload.ciphertext)
+        tag = base64.b64decode(payload.tag)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid base64 in encrypted payload")
+    c_and_tag = ct + tag
+    aad = (payload.aad.encode() if isinstance(payload.aad, str) else AAD_CONTEXT_DEFAULT)
+    try:
+        plaintext = aes.decrypt(iv, c_and_tag, aad)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Decryption failed or invalid auth tag")
+    try:
+        return json.loads(plaintext.decode("utf-8"))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Decrypted data is not valid JSON")
+
+# ---------- Your existing AnalyzeRequest and /analyze endpoint ----------
 class AnalyzeRequest(BaseModel):
     groq_api_key: str
     exa_api_key: str
     github_repo: str
     verbose: bool = False
-
 
 @app.post("/analyze")
 def analyze(request: AnalyzeRequest):
@@ -197,3 +264,27 @@ def analyze(request: AnalyzeRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ---------- New encrypted endpoint ----------
+@app.post("/analyze_secure")
+def analyze_secure(payload: EncryptedPayload):
+    """
+    Accepts AES-256-GCM encrypted request, returns AES-256-GCM encrypted response.
+    Request plaintext must be the same JSON as AnalyzeRequest.
+    """
+    # Decrypt request -> dict
+    inner = decrypt_to_json(payload)
+
+    # Validate into AnalyzeRequest
+    try:
+        req = AnalyzeRequest(**inner)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid AnalyzeRequest fields: {e}")
+
+    # Run the existing analyze function directly (calls the same logic)
+    result = analyze(req)  # returns dict or raises
+
+    # Encrypt response with same/supplied AAD (or default)
+    aad_bytes = (payload.aad.encode() if isinstance(payload.aad, str) else AAD_CONTEXT_DEFAULT)
+    enc = encrypt_json(result, aad=aad_bytes)
+    return enc
