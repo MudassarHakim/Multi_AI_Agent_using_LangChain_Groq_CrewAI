@@ -78,7 +78,7 @@ async def analyze(request: Request):
 
     # ... your Crew/Agents logic remains unchanged ...
     # --- Stub values so response works ---
-    threats = ["Example threat 1", "Example threat 2"]
+    threats1 = ["Example threat 1", "Example threat 2"]
     parsed_cves = ["CVE-2025-1234"]
     parsed_mitigations = ["Apply patch X.Y.Z", "Use input validation"]
     summary = "This is a stubbed executive summary."
@@ -86,7 +86,7 @@ async def analyze(request: Request):
 
     result_payload = {
         "repository": req.github_repo,
-        "threats": threats,
+        "threats": threats1,
         "cves": parsed_cves,
         "mitigations": parsed_mitigations,
         "executive_summary": summary,
