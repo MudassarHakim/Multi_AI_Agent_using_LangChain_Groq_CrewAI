@@ -77,6 +77,12 @@ async def analyze(request: Request):
         raise HTTPException(status_code=422, detail="Invalid request schema")
 
     # ... your Crew/Agents logic remains unchanged ...
+    # --- Stub values so response works ---
+    threats = ["Example threat 1", "Example threat 2"]
+    parsed_cves = ["CVE-2025-1234"]
+    parsed_mitigations = ["Apply patch X.Y.Z", "Use input validation"]
+    summary = "This is a stubbed executive summary."
+    results = {"token_usage": {"prompt_tokens": 42, "completion_tokens": 21}}
 
     result_payload = {
         "repository": req.github_repo,
