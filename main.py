@@ -46,9 +46,9 @@ def encrypt_payload(obj: Any) -> str:
     encrypted_b64 = base64.b64encode(ciphertext + encryptor.tag).decode()
     return json.dumps({"data": encrypted_b64})  # <-- JSON wrapper
 
-def decrypt_payload(encrypted_body: bytes) -> dict:
+def decrypt_payload(encrypted_b64: str) -> dict:
     try:
-        decoded = base64.b64decode(encrypted_body)
+        decoded = base64.b64decode(encrypted_b64)
         ciphertext, tag = decoded[:-16], decoded[-16:]
         cipher = Cipher(algorithms.AES(AES_KEY), modes.GCM(FIXED_IV, tag), backend=default_backend())
         decryptor = cipher.decryptor()
@@ -56,6 +56,7 @@ def decrypt_payload(encrypted_body: bytes) -> dict:
         return json.loads(plaintext.decode())
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid encrypted payload: {str(e)}")
+
 
 @app.post("/analyze", response_class=Response)
 async def analyze(request: Request):
@@ -65,7 +66,7 @@ async def analyze(request: Request):
         ciphertext_b64 = body_json.get("data")
         if not ciphertext_b64:
             raise HTTPException(status_code=400, detail="Missing 'data' field in request body")
-        data = decrypt_payload(ciphertext_b64.encode())
+        data = decrypt_payload(ciphertext_b64)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid request payload: {str(e)}")
 
