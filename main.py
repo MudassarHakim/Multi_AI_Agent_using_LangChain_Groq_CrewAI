@@ -17,7 +17,7 @@ if not ENCRYPTION_KEY:
     raise RuntimeError("Missing ENCRYPTION_KEY environment variable")
 
 # must be 32 bytes for AES-256
-AES_KEY = ENCRYPTION_KEY.encode()[:32]
+AES_KEY = base64.b64decode(ENCRYPTION_KEY)[:32]
 FIXED_IV = b"1234567890abcdef"  # 16 bytes IV (must match frontend)
 
 app = FastAPI()
