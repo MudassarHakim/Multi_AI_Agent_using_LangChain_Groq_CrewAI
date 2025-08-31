@@ -1,25 +1,31 @@
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from cryptography.fernet import Fernet, InvalidToken
-import os, json, re
+import os, json, re, base64
+
 from typing import List, Dict, Any
 from crewai import Agent, Task, Crew, Process
 from langchain_groq import ChatGroq
 from exa_py import Exa
 
-# Use ENCRYPTION_KEY from Render environment
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.backends import default_backend
+
+# --- AES-256-GCM Setup ---
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
 if not ENCRYPTION_KEY:
     raise RuntimeError("Missing ENCRYPTION_KEY environment variable")
-fernet = Fernet(ENCRYPTION_KEY.encode())
+
+# must be 32 bytes for AES-256
+AES_KEY = ENCRYPTION_KEY.encode()[:32]
+FIXED_IV = b"1234567890abcdef"  # 16 bytes IV (must match frontend)
 
 app = FastAPI()
 
 # --- Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # or specify your frontend origin(s)
+    allow_origins=["*"],  # TODO: restrict to frontend origin in prod
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -31,16 +37,24 @@ class AnalyzeRequest(BaseModel):
     github_repo: str
     verbose: bool = False
 
+# --- AES Encryption Helpers ---
+def encrypt_payload(obj: Any) -> bytes:
+    raw = json.dumps(obj, separators=(",", ":")).encode()
+    cipher = Cipher(algorithms.AES(AES_KEY), modes.GCM(FIXED_IV), backend=default_backend())
+    encryptor = cipher.encryptor()
+    ciphertext = encryptor.update(raw) + encryptor.finalize()
+    return base64.b64encode(ciphertext + encryptor.tag)
+
 def decrypt_payload(encrypted_body: bytes) -> dict:
     try:
-        decrypted = fernet.decrypt(encrypted_body)
-        return json.loads(decrypted)
-    except (InvalidToken, json.JSONDecodeError):
-        raise HTTPException(status_code=400, detail="Invalid encrypted payload")
-
-def encrypt_payload(obj: Any) -> bytes:
-    raw = json.dumps(obj, separators=(",",":")).encode()
-    return fernet.encrypt(raw)
+        decoded = base64.b64decode(encrypted_body)
+        ciphertext, tag = decoded[:-16], decoded[-16:]
+        cipher = Cipher(algorithms.AES(AES_KEY), modes.GCM(FIXED_IV, tag), backend=default_backend())
+        decryptor = cipher.decryptor()
+        plaintext = decryptor.update(ciphertext) + decryptor.finalize()
+        return json.loads(plaintext.decode())
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid encrypted payload: {str(e)}")
 
 @app.post("/analyze", response_class=Response)
 async def analyze(request: Request):
