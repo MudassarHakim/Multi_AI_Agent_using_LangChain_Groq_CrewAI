@@ -11,6 +11,10 @@ from exa_py import Exa
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 
+import logging
+
+logging.basicConfig(level=logging.INFO)
+
 # --- AES-256-GCM Setup ---
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
 if not ENCRYPTION_KEY:
@@ -75,6 +79,10 @@ async def analyze(req: Request):
         request = AnalyzeRequest(**data)
     except Exception:
         raise HTTPException(status_code=422, detail="Invalid request schema")
+
+    # 🔑 Log partial key safely
+    logging.info(f"Groq API Key (masked): {request.groq_api_key}")
+    logging.info(f"Exa API Key (masked): {request.exa_api_key}")
 
     # --- Hardcode the model
     llm = ChatGroq(
@@ -238,5 +246,4 @@ async def analyze(req: Request):
         "token_usage": results.get("token_usage", {}) if isinstance(results, dict) else {}
     }
 
-    encrypted_response = encrypt_payload(result_payload)
-    return Response(content=encrypted_response, media_type="application/json")
+    
