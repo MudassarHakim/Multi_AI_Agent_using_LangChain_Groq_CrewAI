@@ -87,10 +87,10 @@ async def analyze(req: Request):
     # --- Hardcode the model
     llm = ChatGroq(
         temperature=0.1,
-        model_name="groq/llama3-70b-8192",
+        model_name="llama3-70b-8192",
         groq_api_key=request.groq_api_key
     )
-
+    
     # --- Threat Analyst
     def fetch_cybersecurity_threats(query):
         result = exa_client.search_and_contents(query)
