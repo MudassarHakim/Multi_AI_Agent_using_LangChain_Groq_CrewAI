@@ -90,7 +90,7 @@ async def analyze(req: Request):
     # --- Hardcode the model
     llm1 = ChatGroq(
         temperature=0.1,
-        model_name="llama-3.1-8b-instant",
+        model_name="groq/llama-3.1-8b-instant",
         groq_api_key=request.groq_api_key
     )
     
