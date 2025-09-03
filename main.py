@@ -85,9 +85,9 @@ async def analyze(req: Request):
     logging.info(f"Exa API Key (masked): {request.exa_api_key}")
 
     # --- Hardcode the model
-    llm = ChatGroq(
+    llm1 = ChatGroq(
         temperature=0.1,
-        model_name="llama3-70b-8192",
+        model_name="groq/llama3-70b-8192",
         groq_api_key=request.groq_api_key
     )
     
@@ -111,7 +111,7 @@ async def analyze(req: Request):
         backstory="Expert in code risk hunting and OSINT.",
         verbose=request.verbose,
         allow_delegation=False,
-        llm=llm,
+        llm=llm1,
     )
     threat_analysis_task = Task(
         description=f"Analyze the GitHub repo {request.github_repo} using Exa API for security/code risks.",
@@ -120,6 +120,9 @@ async def analyze(req: Request):
         callback=lambda _: fetch_cybersecurity_threats(request.github_repo),
     )
 
+    logging.info(f"Threat Analyst LLM: {type(threat_analyst.llm)}")
+
+
     # --- Vulnerability Researcher
     vulnerability_researcher = Agent(
         role="Vulnerability Researcher",
@@ -127,7 +130,7 @@ async def analyze(req: Request):
         backstory="Specialist in code and dependency vulnerabilities.",
         verbose=request.verbose,
         allow_delegation=False,
-        llm=llm,
+        llm=llm1,
     )
     vulnerability_research_task = Task(
         description=(
@@ -147,7 +150,7 @@ async def analyze(req: Request):
         backstory="Blue-team expert mapping threats to mitigations.",
         verbose=request.verbose,
         allow_delegation=False,
-        llm=llm,
+        llm=llm1,
     )
     incident_response_task = Task(
         description=(
@@ -166,7 +169,7 @@ async def analyze(req: Request):
         backstory="Veteran security report writer.",
         verbose=request.verbose,
         allow_delegation=False,
-        llm=llm,
+        llm=llm1,
     )
     write_threat_report_task = Task(
         description="Summarize CVEs and mitigations into an executive summary (plain text, not JSON).",
@@ -183,7 +186,7 @@ async def analyze(req: Request):
         process=Process.sequential,
         full_output=True,
         share_crew=False,
-        manager_llm=llm,
+        manager_llm=llm1,
     )
     results = crew.kickoff()
 
