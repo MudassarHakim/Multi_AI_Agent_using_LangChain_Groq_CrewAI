@@ -83,6 +83,9 @@ async def analyze(req: Request):
     # 🔑 Log partial key safely
     logging.info(f"Groq API Key (masked): {request.groq_api_key}")
     logging.info(f"Exa API Key (masked): {request.exa_api_key}")
+    
+    os.environ["GROQ_API_KEY"] = request.groq_api_key
+    exa_client = Exa(api_key=request.exa_api_key)
 
     # --- Hardcode the model
     llm1 = ChatGroq(
