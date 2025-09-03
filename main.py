@@ -59,10 +59,10 @@ def decrypt_payload(encrypted_b64: str) -> dict:
 
 
 @app.post("/analyze", response_class=Response)
-async def analyze(request: Request):
+async def analyze(req: Request):
     # 1) Read and decrypt incoming body (expects JSON { "data": "..." })
     try:
-        body_json = await request.json()
+        body_json = await req.json()
         ciphertext_b64 = body_json.get("data")
         if not ciphertext_b64:
             raise HTTPException(status_code=400, detail="Missing 'data' field in request body")
@@ -72,7 +72,7 @@ async def analyze(request: Request):
 
     # 2) Validate via Pydantic
     try:
-        req = AnalyzeRequest(**data)
+        request = AnalyzeRequest(**data)
     except Exception:
         raise HTTPException(status_code=422, detail="Invalid request schema")
 
@@ -85,7 +85,7 @@ async def analyze(request: Request):
     results = {"token_usage": {"prompt_tokens": 42, "completion_tokens": 21}}
 
     result_payload = {
-        "repository": req.github_repo,
+        "repository": request.github_repo,
         "threats": threats1,
         "cves": parsed_cves,
         "mitigations": parsed_mitigations,
