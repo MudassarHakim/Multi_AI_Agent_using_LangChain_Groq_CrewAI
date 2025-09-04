@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-import os, json, re, base64
+import os, json, re, base64, requests
 
 from typing import List, Dict, Any
 from crewai import Agent, Task, Crew, Process
@@ -203,6 +203,40 @@ async def analyze(req: Request):
         else:
             summary = str(results)
 
+        # --- real EXA work
+        def fetch_cves_from_nvd(repo_name: str, max_results: int = 5):
+            """
+            Query NVD API for vulnerabilities related to repo keywords (like its name).
+            """
+            keyword = repo_name.split("/")[-1]  # take repo name
+            url = f"https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch={keyword}"
+            resp = requests.get(url, timeout=15)
+            cves = []
+        
+            if resp.status_code == 200:
+                data = resp.json()
+                for item in data.get("vulnerabilities", [])[:max_results]:
+                    cve = item.get("cve", {})
+                    cve_id = cve.get("id")
+                    descriptions = cve.get("descriptions", [])
+                    description = descriptions[0]["value"] if descriptions else "No description"
+                    metrics = cve.get("metrics", {})
+                    severity = "Unknown"
+                    if "cvssMetricV31" in metrics:
+                        severity = metrics["cvssMetricV31"][0]["cvssData"]["baseSeverity"]
+                    elif "cvssMetricV30" in metrics:
+                        severity = metrics["cvssMetricV30"][0]["cvssData"]["baseSeverity"]
+        
+                    cves.append({
+                        "cve_id": cve_id,
+                        "severity": severity,
+                        "description": description,
+                        "fix": "Refer to vendor patch or upgrade guidance.",
+                        "reference_url": f"https://nvd.nist.gov/vuln/detail/{cve_id}"
+                    })
+            return cves
+
+
         # --- Safe JSON parse
         def safe_parse(raw: str, fallback: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             try:
@@ -211,7 +245,13 @@ async def analyze(req: Request):
             except Exception:
                 return fallback
 
-        parsed_cves = safe_parse(vulns_raw, [])
+        # --- Replace Vulnerability Researcher task with real CVE fetch
+        parsed_cves = fetch_cves_from_nvd(request.github_repo, max_results=5)
+        
+        # If no CVEs found, fallback to LLM analysis
+        if not parsed_cves:
+            parsed_cves = safe_parse(vulns_raw, [])
+
         parsed_mitigations = safe_parse(mitigations_raw, [])
         
         # --- Fallback: extract from executive summary if empty
