@@ -23,6 +23,8 @@ if not ENCRYPTION_KEY:
 
 # must be 32 bytes for AES-256
 AES_KEY = base64.b64decode(ENCRYPTION_KEY)[:32]
+
+# TODO: use AESGCM from cryptography or generate a secure random nonce per message and include it with the ciphertext
 FIXED_IV = b"1234567890abcdef"  # 16 bytes IV (must match frontend)
 
 app = FastAPI()
@@ -62,6 +64,9 @@ def decrypt_payload(encrypted_b64: str) -> dict:
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid encrypted payload: {str(e)}")
 
+# TODO: Rate limits, job timeouts, and async behavior
+# TODO: Turn the synchronous kickoff into a background job (worker queue) and return a job id + polling/webhook.
+# TODO: Add request timeouts and token usage caps. Persist token_usage to metrics for cost analysis.
 
 @app.post("/analyze")
 async def analyze(req: Request):
@@ -176,6 +181,9 @@ async def analyze(req: Request):
             context=[vulnerability_research_task, incident_response_task],
         )
 
+        # TODO: Robust Crew usage
+        # switching to Process.parallel for independent tasks (with care for token-concurrency and costs)
+        
         # --- Run Crew
         crew = Crew(
             agents=[threat_analyst, vulnerability_researcher, incident_response_advisor, cybersecurity_writer],
